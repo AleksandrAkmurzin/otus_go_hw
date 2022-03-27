@@ -9,6 +9,8 @@ import (
 
 var ErrInvalidString = errors.New("invalid string")
 
+const escapeString = `\`
+
 func Unpack(inputString string) (string, error) {
 	var resultString strings.Builder
 
@@ -36,6 +38,21 @@ func Unpack(inputString string) (string, error) {
 		}
 
 		nextRune := runes[i+1]
+
+		if string(currentRune) == escapeString {
+			if !unicode.IsDigit(nextRune) && string(nextRune) != escapeString {
+				return "", ErrInvalidString
+			}
+
+			currentRune = nextRune
+			i++
+			if i == lastIndex {
+				resultString.WriteRune(currentRune)
+				break
+			}
+			nextRune = runes[i+1]
+		}
+
 		isJustRepeated = writeOrRepeatRune(&resultString, currentRune, nextRune)
 		if isJustRepeated {
 			i++
