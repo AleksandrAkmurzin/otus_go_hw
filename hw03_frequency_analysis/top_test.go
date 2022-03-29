@@ -6,9 +6,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Change to true if needed.
-var taskWithAsteriskIsCompleted = false
-
 var text = `Как видите, он  спускается  по  лестнице  вслед  за  своим
 	другом   Кристофером   Робином,   головой   вниз,  пересчитывая
 	ступеньки собственным затылком:  бум-бум-бум.  Другого  способа
@@ -79,4 +76,33 @@ func TestTop10(t *testing.T) {
 			require.Equal(t, expected, Top10(text))
 		}
 	})
+}
+
+func TestNoErrorOnShortStringTop(t *testing.T) {
+	require.Equal(t, []string{"б", "а"}, Top10("а б б"))
+}
+
+func TestFrequencyCount(t *testing.T) {
+	simpleFreqText := "А-А А А Б,Б  В - в в...в!"
+	frequency := countWordFrequency(simpleFreqText)
+	if taskWithAsteriskIsCompleted {
+		expected := map[string]int{
+			"а-а": 1,
+			"а":   2,
+			"б":   2,
+			"в":   4,
+		}
+		require.Equal(t, expected, frequency)
+	} else {
+		expected := map[string]int{
+			"А-А":    1,
+			"А":      2,
+			"Б,Б":    1,
+			"В":      1,
+			"в":      1,
+			"-":      1,
+			"в...в!": 1,
+		}
+		require.Equal(t, expected, frequency)
+	}
 }
