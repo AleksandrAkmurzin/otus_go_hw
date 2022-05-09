@@ -15,29 +15,14 @@ var (
 const maxLen = 10
 
 func Top10(text string) []string {
-	wordsFrequency := countWordFrequency(text)
+	wordsFrequencyMap := countWordFrequency(text)
 
-	freq2words := make(map[int][]string, maxLen)
-	for word, freq := range wordsFrequency {
-		freq2words[freq] = append(freq2words[freq], word)
+	wordFrequencies := make([]wordFrequency, 0, len(wordsFrequencyMap))
+	for word, freq := range wordsFrequencyMap {
+		wordFrequencies = append(wordFrequencies, wordFrequency{word, freq})
 	}
 
-	frequencies := make([]int, 0, len(freq2words))
-	for freq := range freq2words {
-		frequencies = append(frequencies, freq)
-	}
-	sort.Ints(frequencies)
-
-	topFreqWords := make([]string, 0, maxLen)
-	for i := len(frequencies) - 1; i >= 0; i-- {
-		currentFreqWords := freq2words[frequencies[i]]
-		sort.Strings(currentFreqWords)
-		topFreqWords = append(topFreqWords, currentFreqWords...)
-		if len(topFreqWords) >= maxLen {
-			break
-		}
-	}
-
+	topFreqWords := sortWords(wordFrequencies)
 	if len(topFreqWords) > maxLen {
 		topFreqWords = topFreqWords[0:maxLen]
 	}
@@ -58,8 +43,7 @@ func countWordFrequency(text string) map[string]int {
 	words := r.Split(text, -1)
 
 	wordsFreq := make(map[string]int, len(words))
-	for i := 0; i < len(words); i++ {
-		word := words[i]
+	for _, word := range words {
 		if taskWithAsteriskIsCompleted && (word == "-" || word == "") {
 			continue
 		}
@@ -67,4 +51,26 @@ func countWordFrequency(text string) map[string]int {
 	}
 
 	return wordsFreq
+}
+
+type wordFrequency struct {
+	word string
+	freq int
+}
+
+func sortWords(frequencies []wordFrequency) []string {
+	sort.Slice(frequencies, func(i, j int) bool {
+		if frequencies[i].freq == frequencies[j].freq {
+			return frequencies[i].word < frequencies[j].word
+		}
+
+		return frequencies[i].freq > frequencies[j].freq
+	})
+
+	words := make([]string, 0, len(frequencies))
+	for _, wordFreq := range frequencies {
+		words = append(words, wordFreq.word)
+	}
+
+	return words
 }

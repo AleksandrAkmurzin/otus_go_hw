@@ -106,3 +106,15 @@ func TestFrequencyCount(t *testing.T) {
 		require.Equal(t, expected, frequency)
 	}
 }
+
+func TestSortWords(t *testing.T) {
+	frequencies := []wordFrequency{
+		{"ААА", 2},
+		{"БББ", 2},
+		{"ВВВ", 3},
+		{"ГГГ", 1},
+	}
+	sortedWords := sortWords(frequencies)
+
+	require.Equal(t, []string{"ВВВ", "ААА", "БББ", "ГГГ"}, sortedWords)
+}
