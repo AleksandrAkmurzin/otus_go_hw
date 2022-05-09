@@ -64,7 +64,7 @@ func TestCache(t *testing.T) {
 		// Renew the oldest value and purge next
 		c.Set("b", 30) // "b" -> "d" -> "c"
 		c.Set("e", 5)  // "e" -> "b" -> "d"  x "c"
-		val, ok = c.Get("c")
+		_, ok = c.Get("c")
 		require.False(t, ok)
 
 		// Renew the oldest by getting value and purge next
@@ -73,7 +73,7 @@ func TestCache(t *testing.T) {
 		require.True(t, ok)
 
 		c.Set("f", 6) // "f" -> "d" -> "e"  x "b"
-		val, ok = c.Get("b")
+		_, ok = c.Get("b")
 		require.False(t, ok)
 	})
 
@@ -92,8 +92,6 @@ func TestCache(t *testing.T) {
 }
 
 func TestCacheMultithreading(t *testing.T) {
-	t.Skip() // Remove me if task with asterisk completed.
-
 	c := NewCache(10)
 	wg := &sync.WaitGroup{}
 	wg.Add(2)
