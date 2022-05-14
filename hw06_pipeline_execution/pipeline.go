@@ -10,9 +10,40 @@ type Stage func(in In) (out Out)
 
 func ExecutePipeline(in In, done In, stages ...Stage) Out {
 	for _, stage := range stages {
-		in = stage(in)
-
+		in = stageStoppable(stage, in, done)
 	}
 
 	return in
+}
+
+func stageStoppable(stage Stage, in In, done In) Out {
+	inDouble := make(Bi)
+	out := stage(inDouble)
+	go func() {
+		defer func() {
+			close(inDouble)
+			// Prevent goroutines leak.
+			for range in {
+			}
+		}()
+
+		for {
+			select {
+			case <-done:
+				return
+			case v, ok := <-in:
+				if !ok {
+					return
+				}
+				select {
+				case <-done:
+					return
+				default:
+					inDouble <- v
+				}
+			}
+		}
+	}()
+
+	return out
 }
