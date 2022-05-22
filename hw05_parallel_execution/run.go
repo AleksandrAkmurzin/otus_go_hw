@@ -3,6 +3,7 @@ package hw05parallelexecution
 import (
 	"errors"
 	"sync"
+	"sync/atomic"
 )
 
 var ErrErrorsLimitExceeded = errors.New("errors limit exceeded")
@@ -15,10 +16,13 @@ func Run(tasks []Task, n, m int) error {
 		return ErrErrorsLimitExceeded
 	}
 
-	var wg sync.WaitGroup
+	var (
+		wg                    sync.WaitGroup
+		errorLimit            = int32(m)
+		isErrorsLimitExceeded bool
+	)
 
 	taskChan := make(chan Task)
-	taskResultChan := make(chan error)
 	quitChan := make(chan struct{})
 
 	// Start exactly n workers.
@@ -26,61 +30,50 @@ func Run(tasks []Task, n, m int) error {
 	for i := 0; i < n; i++ {
 		go func() {
 			for task := range taskChan {
-				taskResultChan <- task()
+				if err := task(); err != nil {
+					if atomic.AddInt32(&errorLimit, -1) == 0 {
+						quitChan <- struct{}{}
+						isErrorsLimitExceeded = true
+					}
+				}
 			}
 			wg.Done()
 		}()
 	}
 
-	// Start async error counter.
-	go errorLimiter(taskResultChan, m, quitChan)
-
 	// Feed workers while errors limit is not exceeded.
-	isAllTasksDispatched := feed(tasks, taskChan, quitChan)
+	go feed(tasks, taskChan, quitChan)
 
-	// Finish work.
 	wg.Wait()
-	close(taskResultChan)
+	close(quitChan)
 
-	if !isAllTasksDispatched {
+	if isErrorsLimitExceeded {
 		return ErrErrorsLimitExceeded
 	}
 
 	return nil
 }
 
-// Writes to quitChan if errLimit of errors from taskResultChan exceeded.
-func errorLimiter(taskResultChan <-chan error, errLimit int, quitChan chan<- struct{}) {
-	for err := range taskResultChan {
-		if err == nil {
-			continue
-		}
-
-		errLimit--
-		if errLimit == 0 {
-			quitChan <- struct{}{}
-		}
-	}
-}
-
 // Returns true if all tasks were successfully fed to taskChannel.
-func feed(tasks []Task, taskChannel chan<- Task, quitChan <-chan struct{}) bool {
-	defer close(taskChannel)
+func feed(tasks []Task, taskChannel chan<- Task, quitChan <-chan struct{}) {
+	defer func() {
+		close(taskChannel)
+		for range quitChan {
+		}
+	}()
 
 	for _, task := range tasks {
 		select {
 		case <-quitChan:
-			return false
+			return
 		default:
 		}
 
 		select {
 		case <-quitChan:
-			return false
+			return
 		case taskChannel <- task:
 			// Next task was dispatched.
 		}
 	}
-
-	return true
 }
