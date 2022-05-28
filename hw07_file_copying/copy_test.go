@@ -64,15 +64,23 @@ func TestCountRealLimit(t *testing.T) {
 }
 
 func TestCopy(t *testing.T) {
-	tempFile, _ := os.CreateTemp("", "")
-	toPath := tempFile.Name()
-	defer os.Remove(toPath)
+	tempFile, err := os.CreateTemp("", "")
+	if err != nil {
+		t.Errorf("Error creating temp file: %s", err)
+	}
+	tmpFileName := tempFile.Name()
+	defer func() {
+		err = os.Remove(tmpFileName)
+		if err != nil {
+			t.Logf("Error while removing temp file [%s]: %s", tmpFileName, err)
+		}
+	}()
 
 	t.Run("Full copy", func(t *testing.T) {
-		err := Copy(inputFilePath, toPath, 0, 0)
+		err := Copy(inputFilePath, tmpFileName, 0, 0)
 		require.NoError(t, err)
 
-		resultFileInfo, _ = os.Stat(toPath)
+		resultFileInfo, _ = os.Stat(tmpFileName)
 		require.Equal(t, inputFileSize, resultFileInfo.Size())
 	})
 
@@ -97,10 +105,10 @@ func TestCopy(t *testing.T) {
 
 	for _, testCase := range testCases {
 		t.Run(testCase.testName, func(t *testing.T) {
-			err := Copy(inputFilePath, toPath, testCase.offset, int64(testCase.limit))
+			err := Copy(inputFilePath, tmpFileName, testCase.offset, int64(testCase.limit))
 			require.NoError(t, err)
 
-			result, err := os.ReadFile(toPath)
+			result, err := os.ReadFile(tmpFileName)
 			require.NoError(t, err)
 			require.Equal(t, testCase.expectedResult, string(result))
 		})
