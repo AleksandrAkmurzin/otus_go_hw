@@ -2,9 +2,10 @@ package main
 
 import (
 	"fmt"
-	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestReadDir(t *testing.T) {

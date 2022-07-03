@@ -8,7 +8,8 @@ import (
 
 // RunCmd runs a command + arguments (cmd) with environment variables from env.
 func RunCmd(cmd []string, env Environment) (returnCode int) {
-	command := exec.Command(cmd[0], cmd[1:]...)
+	cmdName := cmd[0]
+	command := exec.Command(cmdName, cmd[1:]...)
 
 	for envName, envValue := range env {
 		if err := processEnv(envName, envValue); err != nil {
@@ -22,6 +23,7 @@ func RunCmd(cmd []string, env Environment) (returnCode int) {
 	command.Stderr = os.Stderr
 
 	if err := command.Run(); err != nil {
+		//nolint:errorlint
 		if exitError, ok := err.(*exec.ExitError); ok {
 			return exitError.ExitCode()
 		}
@@ -31,17 +33,11 @@ func RunCmd(cmd []string, env Environment) (returnCode int) {
 }
 
 func processEnv(envName string, value EnvValue) (err error) {
-	_, ok := os.LookupEnv(envName)
-
-	if !value.NeedRemove {
-		err = os.Setenv(envName, value.Value)
+	if value.NeedRemove {
+		err = os.Unsetenv(envName)
 		return
 	}
 
-	if !ok {
-		return
-	}
-
-	err = os.Unsetenv(envName)
+	err = os.Setenv(envName, value.Value)
 	return
 }

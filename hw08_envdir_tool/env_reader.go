@@ -30,7 +30,6 @@ func ReadDir(dir string) (Environment, error) {
 
 	environment := make(Environment, len(files))
 	for _, fileInfo := range files {
-
 		envValue, err := fileToEnvValue(dir, fileInfo)
 		if err != nil {
 			return nil, err
@@ -61,7 +60,7 @@ func fileToEnvValue(dir string, info os.FileInfo) (envValue EnvValue, err error)
 	b := bufio.NewReader(file)
 	line, err := b.ReadBytes('\n')
 	if err != nil {
-		if err != io.EOF {
+		if !errors.Is(err, io.EOF) {
 			return
 		}
 	} else {
