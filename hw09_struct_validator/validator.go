@@ -42,32 +42,76 @@ func Validate(v interface{}) error {
 
 	validationErrors := make(ValidationErrors, 0)
 	for i := 0; i < rt.NumField(); i++ {
-		f := rt.Field(i)
-		tag, ok := f.Tag.Lookup("validate")
-		if !ok {
-			continue
+		vErrs, err := validateStructField(rt.Field(i), rv.Field(i), "")
+		if err != nil {
+			return err
 		}
 
-		value := rv.Field(i)
-
-		conditions := strings.Split(tag, "|")
-		for i := range conditions {
-			parts := strings.Split(conditions[i], ":")
-			if len(parts) != 2 {
-				return fmt.Errorf("wrong validation rule format for field %s", f.Name)
-			}
-			vErrs, err := validateCondition(parts[0], parts[1], f.Name, value)
-			if err != nil {
-				return err
-			}
-
-			for errIndex := range vErrs {
-				validationErrors = append(validationErrors, vErrs[errIndex])
-			}
-		}
+		validationErrors = append(validationErrors, vErrs...)
 	}
 
 	return validationErrors
+}
+
+func validateStructField(
+	f reflect.StructField,
+	v reflect.Value,
+	parentFieldName string,
+) (vErrs ValidationErrors, err error) {
+	tag, ok := f.Tag.Lookup("validate")
+	if !ok {
+		return
+	}
+
+	if tag == "nested" {
+		if v.Kind() != reflect.Struct {
+			err = errors.New("tag validate:nested applicable only for struct")
+			return
+		}
+
+		for i := 0; i < f.Type.NumField(); i++ {
+			nestedFieldValue := v.Field(i)
+			nestedParentFieldName := f.Name
+			if parentFieldName != "" {
+				nestedParentFieldName = parentFieldName + "." + nestedParentFieldName
+			}
+			nestedVErrs, err := validateStructField(
+				f.Type.Field(i),
+				nestedFieldValue,
+				nestedParentFieldName,
+			)
+			if err != nil {
+				return vErrs, err
+			}
+
+			vErrs = append(vErrs, nestedVErrs...)
+		}
+
+		return
+	}
+
+	fieldName := f.Name
+	if parentFieldName != "" {
+		fieldName = parentFieldName + "." + fieldName
+	}
+
+	conditions := strings.Split(tag, "|")
+	for i := range conditions {
+		parts := strings.Split(conditions[i], ":")
+		if len(parts) != 2 {
+			err = fmt.Errorf("wrong validation rule format for field %s", fieldName)
+			return
+		}
+
+		conditionVErrs, err := validateCondition(parts[0], parts[1], fieldName, v)
+		if err != nil {
+			return vErrs, err
+		}
+
+		vErrs = append(vErrs, conditionVErrs...)
+	}
+
+	return
 }
 
 func validateCondition(
@@ -104,13 +148,16 @@ func validateCondition(
 			if err != nil {
 				return vErrs, err
 			}
-			for errIndex := range sliceValidationErrors {
-				vErrs = append(vErrs, sliceValidationErrors[errIndex])
-			}
+
+			vErrs = append(vErrs, sliceValidationErrors...)
 		}
 
 	default:
 		return ValidationErrors{}, fmt.Errorf("validation of type %v is not supported", kind)
+	}
+
+	if err != nil {
+		err = fmt.Errorf("%w for field %s", err, fieldName)
 	}
 
 	return

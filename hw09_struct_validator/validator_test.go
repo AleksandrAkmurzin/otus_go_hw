@@ -1,7 +1,6 @@
 package hw09structvalidator
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -20,7 +19,11 @@ type (
 		Email  string   `validate:"regexp:^\\w+@\\w+\\.\\w+$"`
 		Role   UserRole `validate:"in:admin,stuff"`
 		Phones []string `validate:"len:11"`
-		meta   json.RawMessage
+		m      Meta     `validate:"nested"`
+	}
+
+	Meta struct {
+		app App `validate:"nested"`
 	}
 
 	App struct {
@@ -47,7 +50,7 @@ func TestValidate(t *testing.T) {
 		Email:  "mail@example.com",
 		Role:   "admin",
 		Phones: []string{"12345678901", "1234567890a"},
-		meta:   nil,
+		m:      Meta{App{"1.2.3"}},
 	}
 
 	tests := []struct {
@@ -90,6 +93,12 @@ func TestValidate(t *testing.T) {
 			},
 		},
 		{
+			func(user User) User { user.m.app.Version = "invalid"; return user }(validUser),
+			ValidationErrors{
+				{"m.app.Version", ErrInvalidStringLength},
+			},
+		},
+		{
 			Response{200, ""},
 			nil,
 		},
@@ -111,7 +120,7 @@ func TestValidate(t *testing.T) {
 				if tt.expectedErr == nil {
 					require.Zero(t, len(vErrs))
 				} else {
-					require.Equal(t, vErrs, tt.expectedErr)
+					require.Equal(t, tt.expectedErr, vErrs)
 				}
 				return
 			}
@@ -124,31 +133,38 @@ func TestValidate(t *testing.T) {
 
 func TestErrorCases(t *testing.T) {
 	tests := []struct {
-		name  string
-		value interface{}
+		name        string
+		value       interface{}
+		errContains string
 	}{
-		{"Only structs", "no struct"},
+		{"OnlyStructs", "no struct", "struct"},
 		{"No bool validation", struct {
-			b bool `validate:"unknown"`
-		}{}},
+			b bool `validate:"in:true"`
+		}{}, "bool"},
 		{"UnsupportedIntRule", struct {
 			i int `validate:"sign:unsigned"`
-		}{}},
+		}{}, "sign"},
 		{"UnsupportedStringRule", struct {
 			s string `validate:"maxLength:1024"`
-		}{}},
+		}{}, "maxLength"},
 		{"InvalidRuleSyntax", struct {
-			i int `validate:"min:a"`
-		}{}},
+			invalidInt int `validate:"min:a"`
+		}{}, "invalidInt"},
+		{"NestedField", struct {
+			n struct {
+				i int `validate:"unknown:"`
+			} `validate:"nested"`
+		}{}, "n.i"},
 		{"Valid", struct {
 			s string `validate:"len:3"`
-		}{"abc"}},
+		}{"abc"}, ""},
 	}
 
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			err := Validate(test.value)
 			require.Error(t, err)
+			require.ErrorContains(t, err, test.errContains)
 
 			var vErrs ValidationErrors
 			if errors.As(err, &vErrs) {
