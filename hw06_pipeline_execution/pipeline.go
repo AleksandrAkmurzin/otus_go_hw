@@ -9,16 +9,18 @@ type (
 type Stage func(in In) (out Out)
 
 func ExecutePipeline(in In, done In, stages ...Stage) Out {
+	in = stageStoppable(in, done)
+
 	for _, stage := range stages {
-		in = stageStoppable(stage, in, done)
+		in = stageStoppable(stage(in), done)
 	}
 
 	return in
 }
 
-func stageStoppable(stage Stage, in In, done In) Out {
+func stageStoppable(in In, done In) Out {
 	inDouble := make(Bi)
-	out := stage(inDouble)
+
 	go func() {
 		defer func() {
 			close(inDouble)
@@ -45,5 +47,5 @@ func stageStoppable(stage Stage, in In, done In) Out {
 		}
 	}()
 
-	return out
+	return inDouble
 }
