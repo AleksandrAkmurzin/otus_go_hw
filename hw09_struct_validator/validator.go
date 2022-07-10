@@ -4,6 +4,8 @@ import (
 	"errors"
 	"fmt"
 	"reflect"
+	"regexp"
+	"strconv"
 	"strings"
 )
 
@@ -15,12 +17,12 @@ type ValidationError struct {
 type ValidationErrors []ValidationError
 
 func (vErr ValidationError) Error() string {
-	childErr := strings.Builder{}
-	childErr.WriteString("error on field [")
-	childErr.WriteString(vErr.Field)
-	childErr.WriteString("]: ")
-	childErr.WriteString(vErr.Err.Error())
-	return childErr.String()
+	b := strings.Builder{}
+	b.WriteString("error on field [")
+	b.WriteString(vErr.Field)
+	b.WriteString("]: ")
+	b.WriteString(vErr.Err.Error())
+	return b.String()
 }
 
 func (v ValidationErrors) Error() string {
@@ -31,6 +33,20 @@ func (v ValidationErrors) Error() string {
 
 	return "validation errors: " + strings.Join(childErrors, ", ")
 }
+
+var (
+	ErrValidation = errors.New("validation error")
+
+	ErrInvalidInt      = fmt.Errorf("%w: invalid int", ErrValidation)
+	ErrIntTooLow       = fmt.Errorf("%w: value less then allowed min", ErrInvalidInt)
+	ErrIntTooLarge     = fmt.Errorf("%w: value more then allowed max", ErrInvalidInt)
+	ErrIntNotInAllowed = fmt.Errorf("%w: value is not present in allowed list", ErrInvalidInt)
+
+	ErrInvalidString        = fmt.Errorf("%w: invalid string", ErrValidation)
+	ErrInvalidStringLength  = fmt.Errorf("%w: invalid string length", ErrInvalidString)
+	ErrStringNotMatchRegexp = fmt.Errorf("%w: string not match given regexp", ErrInvalidString)
+	ErrStringNotInAllowed   = fmt.Errorf("%w: value is not present in allowed list", ErrInvalidString)
+)
 
 func Validate(v interface{}) error {
 	rt := reflect.TypeOf(v)
@@ -164,6 +180,41 @@ func validateCondition(
 }
 
 func validateString(value string, ruleName string, condition string) error {
+	stringValidationRules := map[string]func(condition string, value string) error{
+		"len": func(exactLen string, testValue string) error {
+			targetValueLength, err := strconv.Atoi(exactLen)
+			if err != nil {
+				return err
+			}
+			if len(testValue) != targetValueLength {
+				return ErrInvalidStringLength
+			}
+
+			return nil
+		},
+		"regexp": func(re string, testValue string) error {
+			expr, err := regexp.Compile(re)
+			if err != nil {
+				return err
+			}
+
+			if !expr.MatchString(testValue) {
+				return ErrStringNotMatchRegexp
+			}
+
+			return nil
+		},
+		"in": func(allowedStrings string, testValue string) error {
+			for _, allowedString := range strings.Split(allowedStrings, ",") {
+				if testValue == allowedString {
+					return nil
+				}
+			}
+
+			return ErrStringNotInAllowed
+		},
+	}
+
 	validator, ok := stringValidationRules[ruleName]
 	if !ok {
 		return errors.New("unsupported string validation rule: " + ruleName)
@@ -173,6 +224,45 @@ func validateString(value string, ruleName string, condition string) error {
 }
 
 func validateInt(value int, ruleName string, condition string) error {
+	intValidationRules := map[string]func(condition string, testValue int) error{
+		"min": func(allowedMinValue string, testValue int) error {
+			minValue, err := strconv.Atoi(allowedMinValue)
+			if err != nil {
+				return err
+			}
+			if testValue < minValue {
+				return ErrIntTooLow
+			}
+
+			return nil
+		},
+		"max": func(allowedMaxValue string, testValue int) error {
+			maxValue, err := strconv.Atoi(allowedMaxValue)
+			if err != nil {
+				return err
+			}
+			if testValue > maxValue {
+				return ErrIntTooLarge
+			}
+
+			return nil
+		},
+		"in": func(allowedIntegers string, testValue int) error {
+			for _, allowedIntS := range strings.Split(allowedIntegers, ",") {
+				allowedInt, err := strconv.Atoi(allowedIntS)
+				if err != nil {
+					return err
+				}
+
+				if testValue == allowedInt {
+					return nil
+				}
+			}
+
+			return ErrIntNotInAllowed
+		},
+	}
+
 	validator, ok := intValidationRules[ruleName]
 	if !ok {
 		return errors.New("unsupported int validation rule: " + ruleName)
