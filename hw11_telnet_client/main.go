@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -40,7 +41,11 @@ func run() error {
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT)
 
+	var startedCount int32
+
 	go func() {
+		atomic.AddInt32(&startedCount, 1)
+		serviceOutput("Receiving started")
 		if err := client.Receive(); err != nil {
 			serviceOutput(fmt.Sprintf("error receiving data: [%s]", err))
 			return
@@ -51,6 +56,8 @@ func run() error {
 	}()
 
 	go func() {
+		atomic.AddInt32(&startedCount, 1)
+		serviceOutput("Sending started")
 		if err := client.Send(); err != nil {
 			serviceOutput(fmt.Sprintf("error sending data: [%s]", err))
 			return
@@ -60,6 +67,11 @@ func run() error {
 		cancel()
 	}()
 
+	// Wait goroutines start.
+	for atomic.LoadInt32(&startedCount) < 2 {
+	}
+
+	// Wait for signal or one of goroutines exit.
 	<-ctx.Done()
 
 	return nil

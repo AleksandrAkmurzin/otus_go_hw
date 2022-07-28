@@ -27,8 +27,7 @@ func (t *TelnetClient) Connect() error {
 func (t *TelnetClient) Close() error {
 	errInClose := t.in.Close()
 
-	errConnClose := t.connection.Close()
-	if errConnClose != nil {
+	if errConnClose := t.connection.Close(); errConnClose != nil {
 		return errConnClose
 	}
 
