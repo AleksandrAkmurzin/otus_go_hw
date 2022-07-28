@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"net"
@@ -14,38 +15,45 @@ import (
 var timeout time.Duration
 
 func main() {
+	if err := run(); err != nil {
+		serviceOutput(err.Error())
+	}
+}
+
+func run() error {
 	flag.DurationVar(&timeout, "timeout", 10*time.Second, "--timeout=3s")
 	flag.Parse()
-	addr := net.JoinHostPort(flag.Arg(0), flag.Arg(1))
+	host := flag.Arg(0)
+	port := flag.Arg(1)
+	if host == "" || port == "" {
+		return errors.New("host or port was not set, usage: go-telnet --timeout=5s localhost 4242")
+	}
 
-	client := NewTelnetClient(
-		addr,
-		timeout,
-		os.Stdin,
-		os.Stdout,
-	)
+	addr := net.JoinHostPort(host, port)
+	client := NewTelnetClient(addr, timeout, os.Stdin, os.Stdout)
 
 	if err := client.Connect(); err != nil {
-		exitWithError(fmt.Errorf("error connecting to %s: [%w]", addr, err))
+		return fmt.Errorf("error connecting to %s: [%w]", addr, err)
 	}
+	defer client.Close()
 	serviceOutput("Connected to " + addr)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT)
 
 	go func() {
-		err := client.Receive()
-		if ctx.Err() != nil {
-			os.Exit(0)
+		if err := client.Receive(); err != nil {
+			serviceOutput(fmt.Sprintf("error receiving data: [%s]", err))
+			return
 		}
-		if err != nil {
-			exitWithError(fmt.Errorf("error receiving data: [%w]", err))
-		}
+
+		serviceOutput("Connection was closed by peer")
+		cancel()
 	}()
 
 	go func() {
-		err := client.Send()
-		if err != nil {
-			exitWithError(fmt.Errorf("error sending data: [%w]", err))
+		if err := client.Send(); err != nil {
+			serviceOutput(fmt.Sprintf("error sending data: [%s]", err))
+			return
 		}
 
 		serviceOutput("EOF")
@@ -53,13 +61,10 @@ func main() {
 	}()
 
 	<-ctx.Done()
+
+	return nil
 }
 
-func exitWithError(err error) {
-	serviceOutput(err.Error())
-	os.Exit(1)
-}
-
-func serviceOutput(message string) {
-	_, _ = os.Stderr.WriteString(fmt.Sprintf("...%s\n", message))
+func serviceOutput(msg string) {
+	_, _ = fmt.Fprintf(os.Stderr, "...%s\n", msg)
 }

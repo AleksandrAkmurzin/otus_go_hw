@@ -6,18 +6,11 @@ import (
 	"time"
 )
 
-type TelnetClient interface {
-	Connect() error
-	io.Closer
-	Send() error
-	Receive() error
-}
-
 func NewTelnetClient(address string, timeout time.Duration, in io.ReadCloser, out io.Writer) TelnetClient {
-	return &TelnetClientData{address: address, timeout: timeout, in: in, out: out}
+	return TelnetClient{address: address, timeout: timeout, in: in, out: out}
 }
 
-type TelnetClientData struct {
+type TelnetClient struct {
 	address    string
 	connection net.Conn
 	in         io.ReadCloser
@@ -25,13 +18,13 @@ type TelnetClientData struct {
 	timeout    time.Duration
 }
 
-func (t *TelnetClientData) Connect() error {
+func (t *TelnetClient) Connect() error {
 	conn, err := net.DialTimeout("tcp", t.address, t.timeout)
 	t.connection = conn
 	return err
 }
 
-func (t *TelnetClientData) Close() error {
+func (t *TelnetClient) Close() error {
 	errInClose := t.in.Close()
 
 	errConnClose := t.connection.Close()
@@ -42,12 +35,12 @@ func (t *TelnetClientData) Close() error {
 	return errInClose
 }
 
-func (t *TelnetClientData) Send() error {
+func (t *TelnetClient) Send() error {
 	_, err := io.Copy(t.connection, t.in)
 	return err
 }
 
-func (t *TelnetClientData) Receive() error {
+func (t *TelnetClient) Receive() error {
 	_, err := io.Copy(t.out, t.connection)
 	return err
 }
