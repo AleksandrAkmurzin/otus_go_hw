@@ -1,6 +1,82 @@
 package main
 
+import (
+	"context"
+	"errors"
+	"flag"
+	"fmt"
+	"net"
+	"os"
+	"os/signal"
+	"sync/atomic"
+	"syscall"
+	"time"
+)
+
+var timeout time.Duration
+
 func main() {
-	// Place your code here,
-	// P.S. Do not rush to throw context down, think think if it is useful with blocking operation?
+	if err := run(); err != nil {
+		serviceOutput(err.Error())
+	}
+}
+
+func run() error {
+	flag.DurationVar(&timeout, "timeout", 10*time.Second, "--timeout=3s")
+	flag.Parse()
+	host := flag.Arg(0)
+	port := flag.Arg(1)
+	if host == "" || port == "" {
+		return errors.New("host or port was not set, usage: go-telnet --timeout=5s localhost 4242")
+	}
+
+	addr := net.JoinHostPort(host, port)
+	client := NewTelnetClient(addr, timeout, os.Stdin, os.Stdout)
+
+	if err := client.Connect(); err != nil {
+		return fmt.Errorf("error connecting to %s: [%w]", addr, err)
+	}
+	defer client.Close()
+	serviceOutput("Connected to " + addr)
+
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT)
+
+	var startedCount int32
+
+	go func() {
+		atomic.AddInt32(&startedCount, 1)
+		serviceOutput("Receiving started")
+		if err := client.Receive(); err != nil {
+			serviceOutput(fmt.Sprintf("error receiving data: [%s]", err))
+			return
+		}
+
+		serviceOutput("Connection was closed by peer")
+		cancel()
+	}()
+
+	go func() {
+		atomic.AddInt32(&startedCount, 1)
+		serviceOutput("Sending started")
+		if err := client.Send(); err != nil {
+			serviceOutput(fmt.Sprintf("error sending data: [%s]", err))
+			return
+		}
+
+		serviceOutput("EOF")
+		cancel()
+	}()
+
+	// Wait goroutines start.
+	for atomic.LoadInt32(&startedCount) < 2 {
+	}
+
+	// Wait for signal or one of goroutines exit.
+	<-ctx.Done()
+
+	return nil
+}
+
+func serviceOutput(msg string) {
+	_, _ = fmt.Fprintf(os.Stderr, "...%s\n", msg)
 }
