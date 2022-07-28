@@ -1,8 +1,6 @@
 package main
 
 import (
-	"fmt"
-	"os"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -10,18 +8,12 @@ import (
 
 func TestReadDir(t *testing.T) {
 	t.Run("Wrong dir name", func(t *testing.T) {
-		_, err := ReadDir("testdata")
-		if err != nil {
-			fmt.Println(err)
-		}
+		_, err := ReadDir("toastData")
 		require.Error(t, err)
 	})
 
-	t.Run("Wrong file name", func(t *testing.T) {
-		info, err := os.Stat("testdata/wrong=name")
-		require.NoError(t, err)
-
-		_, err = fileToEnvValue("testdata", info)
+	t.Run("Dir with wrong file name", func(t *testing.T) {
+		_, err := ReadDir("testdata")
 		require.ErrorIs(t, err, ErrUnsupportedFileName)
 	})
 

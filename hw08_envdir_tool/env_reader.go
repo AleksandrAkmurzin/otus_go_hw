@@ -5,8 +5,8 @@ import (
 	"bytes"
 	"errors"
 	"io"
-	"io/ioutil"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -23,54 +23,58 @@ type EnvValue struct {
 // ReadDir reads a specified directory and returns map of env variables.
 // Variables represented as files where filename is name of variable, file first line is a value.
 func ReadDir(dir string) (Environment, error) {
-	files, err := ioutil.ReadDir(dir)
+	dirEntries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, err
 	}
 
-	environment := make(Environment, len(files))
-	for _, fileInfo := range files {
-		envValue, err := fileToEnvValue(dir, fileInfo)
+	environment := make(Environment, len(dirEntries))
+	for _, dirEntry := range dirEntries {
+		if dirEntry.IsDir() {
+			continue
+		}
+
+		envValue, err := fileToEnvValue(dir, dirEntry)
 		if err != nil {
 			return nil, err
 		}
 
-		environment[fileInfo.Name()] = envValue
+		environment[dirEntry.Name()] = envValue
 	}
 
 	return environment, nil
 }
 
-func fileToEnvValue(dir string, info os.FileInfo) (envValue EnvValue, err error) {
-	fileName := info.Name()
+func fileToEnvValue(dir string, fileEntry os.DirEntry) (envValue EnvValue, err error) {
+	fileName := fileEntry.Name()
 	if strings.Contains(fileName, "=") {
 		err = ErrUnsupportedFileName
 		return
 	}
 
-	if info.Size() == 0 {
-		return EnvValue{NeedRemove: true}, nil
-	}
-
-	file, err := os.Open(dir + string(os.PathSeparator) + fileName)
+	fileInfo, err := fileEntry.Info()
 	if err != nil {
 		return
 	}
+	if fileInfo.Size() == 0 {
+		return EnvValue{NeedRemove: true}, nil
+	}
+
+	file, err := os.Open(filepath.Join(dir, fileName))
+	if err != nil {
+		return
+	}
+	defer file.Close()
 
 	b := bufio.NewReader(file)
 	line, err := b.ReadBytes('\n')
-	if err != nil {
-		if !errors.Is(err, io.EOF) {
-			return
-		}
-	} else {
-		// Trim \n at the end of line.
-		line = line[:len(line)-1]
+	if err != nil && !errors.Is(err, io.EOF) {
+		return
 	}
 
 	value := strings.TrimRight(
 		string(bytes.ReplaceAll(
-			line,
+			bytes.TrimRight(line, "\n"),
 			[]byte{'\x00'},
 			[]byte{'\n'},
 		)),
